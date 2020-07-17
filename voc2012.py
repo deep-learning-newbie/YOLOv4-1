@@ -23,7 +23,7 @@ def build_example(annotation, class_map):
 
     width = int(annotation['size']['width'])
     height = int(annotation['size']['height'])
-
+    
     xmin = []
     ymin = []
     xmax = []
