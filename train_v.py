@@ -21,6 +21,8 @@ from yolov4.models_v import (
   transform_targets,
   transform_images,
   YoloLoss,
+  make_yolov4_model,
+  WeightReader,
 )
 
 from tensorflow.keras.callbacks import (
@@ -37,7 +39,8 @@ size = 608
 dataset = './data/voc2012_train.tfrecord'
 v_dataset = './data/voc2012_val.tfrecord'
 label_path = './data/voc2012.names'
-#classes = './data/coco.names'
+#label_path  = './data/coco.names'
+weights_path = './data/yolov4.weights'
 
 labels = [c.strip() for c in open(label_path).readlines()]
 transfer = None
@@ -54,11 +57,16 @@ anchor_masks = yolo_anchor_masks
 masks = yolo_anchor_masks
 
 ###./checkpoints/yolov4_test_u.h5  --> on VOC2012
-#model = Yolov4_2(size, training=True, classes=num_classes)
+'''
 #model = YoloV4(size, training=True, classes=num_classes)
 #model = tf.keras.models.load_model('./checkpoints/yolov4_train_test_E.h5',custom_objects={'Mish':Mish}, compile=False)
 #pre_model = tf.keras.models.load_model('./checkpoints/yolov4.h5',compile = False)#custom_objects={'Mish':Mish}, compile=False)
-pre_model = tf.keras.models.load_model('./checkpoints/yolov4_test_u.h5',custom_objects = {'Mish':Mish}, compile = False)
+#pre_model = tf.keras.models.load_model('./checkpoints/yolov4_test_u.h5',custom_objects = {'Mish':Mish}, compile = False)
+'''
+### 
+pre_model = make_yolov4_model(size, classes_nb=num_classes)#training=True, classes=num_classes)
+weight_reader = WeightReader(weights_path)
+weight_reader.load_weights(pre_model)
 
 fine_tune_at = "convn_136"
 train = True
@@ -78,7 +86,7 @@ x = output_v4_2 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x
 #boxes_v4_1 = Lambda(lambda x: yolo_boxes(x, anchors[masks[1]], classes), name = 'yolo_boxes_v4_1')(output_v4_1)
 #boxes_v4_2 = Lambda(lambda x: yolo_boxes(x, anchors[masks[2]], classes), name = 'yolo_boxes_v4_2')(output_v4_2)
 #outputs_v4 = Lambda(lambda x: yolo_nms(x, anchors, masks, classes), name = 'yolo_nms')((boxes_v4_2[:3], boxes_v4_1[:3], boxes_v4_0[:3]))
-model = tf.keras.models.Model(inputs = [inputs], outputs = [output_v4_0, output_v4_1, output_v4_2], name = 'Yolov4')
+model = tf.keras.models.Model(inputs = [inputs], outputs = [output_v4_2, output_v4_1, output_v4_0], name = 'Yolov4')
 #model = Model(inputs = inputs, outputs = [output_v4_0, output_v4_1, output_v4_2], name = 'Yolov4')
 
 
@@ -108,7 +116,7 @@ model.compile(optimizer=optimizer, loss=loss, run_eagerly = True)#metrics = ['ac
 callbacks = [
             ReduceLROnPlateau(verbose=1),
             EarlyStopping(patience=3, verbose=1),
-            ModelCheckpoint('./checkpoints/yolov4_test_u.h5', verbose=1, save_best_only=True),
+            ModelCheckpoint('./checkpoints/yolov4_voc.h5', verbose=1, save_best_only=True),
             TensorBoard(log_dir='logs', histogram_freq = 1, update_freq = 'epoch')
         ]
         ###'./checkpoints/yolov4_train_mish_lambda_E.h5' --> save model in condition using class Mish
