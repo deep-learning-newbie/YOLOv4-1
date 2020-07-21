@@ -1,5 +1,6 @@
 import time
 import cv2
+
 import tensorflow as tf
 import numpy as np
 from absl import logging
@@ -13,6 +14,8 @@ from yolov4.models_v import (
   yolo_nms,
   transform_images,
   draw_outputs,
+  make_yolov4_model,
+  WeightReader,
 )
 
 from tensorflow.keras.layers import (
@@ -26,14 +29,27 @@ path = './checkpoints/yolov4.h5'
 anchors = yolo_anchors_608
 masks = yolo_anchor_masks
 label_path = './data/coco.names'
+#label_path = './data/voc2012.names'
+weights_path = './data/yolov4.weights'
 
 labels = [c.strip() for c in open(label_path).readlines()]
 
 num_classes = len(labels)
 
+### When using save file
+'''
 #model = Yolov4_detect(path)
 model = tf.keras.models.load_model('./checkpoints/yolov4.h5', custom_objects = {'Mish':Mish},compile = False)
-x = inputs = Input([size, size, channels], name='Yolov4')
+#model = tf.keras.models.load_model('./checkpoints/yolov4_test_u.h5', custom_objects = {'Mish':Mish},compile = False)
+'''
+### When using weight file
+model = make_yolov4_model(size=size, classes_nb = num_classes)
+model.summary()
+weight_reader = WeightReader(weights_path)
+weight_reader.load_weights(model)
+
+
+x = inputs = Input([size, size, channels], name='inputs_v')
 
 output_v4_0, output_v4_1, output_v4_2 = model(x)
 x = output_v4_0 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[0]), num_classes + 5)), name ='output_v4_0_137')(output_v4_0)
@@ -49,7 +65,7 @@ model_best = tf.keras.models.Model(inputs = [inputs], outputs = outputs_v4, name
 t1 = time.time()
 
 image = './data/6dogs'
-output = image + '_out'
+output = image + '_out_s'
 
 img_raw = tf.image.decode_image(open(image + '.jpg', 'rb').read(), channels=3)
 img = tf.expand_dims(img_raw, 0)
