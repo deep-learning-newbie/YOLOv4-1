@@ -27,7 +27,7 @@ def get_gzipped_model_size(file):
     f.write(file)
 
   return os.path.getsize(zipped_file)
-
+ 
 size = 608
 channels = 3
 path = './checkpoints/yolov4.h5'
