@@ -466,7 +466,8 @@ class Mish(tf.keras.layers.Layer):
         self.supports_masking = True
     
     def call(self, inputs):
-        return inputs * tf.math.tanh(tf.math.softplus(inputs))
+        #return inputs * tf.math.tanh(tf.math.softplus(inputs))
+        return inputs * tf.math.tanh(tf.math.log(1. + tf.math.exp(inputs))) # for converting tflite format
     
     def get_config(self):
         base_config = super(Mish, self).get_config()
