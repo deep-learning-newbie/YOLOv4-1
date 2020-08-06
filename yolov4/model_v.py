@@ -53,6 +53,621 @@ yolo_max_boxes = 100
 yolo_iou_threshold = 0.5
 yolo_score_threshold = 0.5
 
+class Mish(tf.keras.layers.Layer):
+    """
+    ..math::
+        Mish(x) = x*tanh(softplus(x)) = x * tanh(ln(1 + e^{x}))
+    
+    Example:
+        X_input = Input(input_shape)
+        X = Mish()(X_input)
+    """
+    def __init__(self, **kwargs):
+        super(Mish, self).__init__(**kwargs)
+        self.supports_masking = True
+    
+    def call(self, inputs):
+        #return inputs * tf.math.tanh(tf.math.softplus(inputs))
+        return inputs * tf.math.tanh(tf.math.log(1. + tf.math.exp(inputs)))
+    
+    def get_config(self):
+        base_config = super(Mish, self).get_config()
+        return {**base_config}
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+#def Mish(inputs):
+#  return inputs * tf.math.tanh(tf.math.softplus(inputs))
+
+tf.keras.utils.get_custom_objects().update({'Mish':Mish})
+
+
+def Conv(x, filters, size, strides=1, activation='Mish', batch_norm=True, idx = None):#, layer_idx = None):
+    if strides == 1:
+        padding = 'same'
+    else:
+        x = ZeroPadding2D(((1, 0), (1, 0)), name = 'ZeroPadding2D_' + str(idx))(x)  # top left half-padding
+        padding = 'valid'
+    x = Conv2D(filters=filters, 
+               kernel_size=size,
+               strides=strides, 
+               padding=padding,
+               use_bias= True, #kernel_regularizer=l2(0.0005),
+               #kernel_initializer = tf.random_normal_initializer(stddev = 0.01),
+               #bias_initializer = tf.constant_initializer(0.),
+               name = 'convn_'+ str(idx) if batch_norm else 'conv_' + str(idx))(x)
+    
+    if batch_norm:
+        x = BatchNormalization(name = 'BN_' + str(idx))(x)
+
+    if activation == "Mish":
+        x = Mish()(x)
+    elif activation == "LeakyReLU":
+        x = LeakyReLU(alpha=0.1, name = 'leakyrelu_' + str(idx))(x)
+    
+    elif activation == "Linear":
+        x = x
+    else:
+        print("Check the DarknetConv's batch_norm")
+        exit()
+    return x
+'''
+def Yolov4_2(size=None, channels=3, anchors=yolo_anchors_608, masks=yolo_anchor_masks, classes=80, training=False, activation = 'Mish', batch_norm = True):
+    x = inputs = Input([size, size, channels], name = 'input_0')
+
+    x = Conv(x, 32, 3, activation = activation, batch_norm = batch_norm, idx = 0)
+    x = Conv(x, 64, 3, 2, activation = activation, batch_norm = batch_norm, idx =1)
+    layer_1 = x
+    x = Conv(x, 64, 1, activation= activation, batch_norm=batch_norm, idx =2)
+    layer_2 = x
+    #idx = 3 (route)
+    x = layer_1
+    x = Conv(x, 64, 1, activation = activation, batch_norm = batch_norm, idx =4)
+    layer_4 = x
+    x = Conv(x, 32, 1, activation = activation, batch_norm = batch_norm, idx =5)
+    x = Conv(x, 64, 3, strides = 1, activation = activation, batch_norm = batch_norm, idx =6) ###
+
+    x = Add(name = 'Add_7')([layer_4, x])
+    x = Conv(x, 64, 1, activation = activation, batch_norm = batch_norm, idx =8)
+    layer_8 = x
+    x = Concatenate(name = 'Concatenate_9')([x, layer_2])
+
+    x = Conv(x, 64, 1, activation = activation, batch_norm = batch_norm, idx =10)
+
+    ###DownSampling
+
+    x = Conv(x, 128, 3, 2, activation = activation, batch_norm = batch_norm, idx =11)
+    layer_11 = x
+
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =12)
+    layer_12 = x
+    #idx = 13 (route)
+    x = layer_11
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =14)
+    layer_14 = x
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =15)
+    x = Conv(x, 64, 3, 1, activation = activation, batch_norm = batch_norm, idx =16)
+    x = Add(name = 'Add_17')([layer_14, x])
+    layer_17 = x
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =18)
+    x = Conv(x, 64, 3, 1, activation = activation, batch_norm = batch_norm, idx =19)
+    x = Add(name = 'Add_20')([layer_17, x])
+
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =21)
+    x = Concatenate(name = 'Concatenate_22')([x, layer_12])
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =23)
+
+    ###DownSampling
+
+    x = Conv(x, 256, 3, 2, activation = activation, batch_norm = batch_norm, idx =24)
+    layer_24 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =25)
+    layer_25 = x
+    #idx = 26 (route)
+    x = layer_24
+    x =Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =27)
+    layer_27 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =28)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =29)
+    x = Add(name = 'Add_30')([layer_27, x])
+    layer_30 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =31)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =32)
+    x = Add(name = 'Add_33')([layer_30, x])
+    layer_33 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =34)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =35)
+    x = Add(name = 'Add_36')([layer_33, x])
+    layer_36 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =37)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =38)
+    x = Add(name = 'Add_39')([layer_36, x])
+    layer_39 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =40)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =41)
+    x = Add(name = 'Add_42')([layer_39, x])
+    layer_42 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =43)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =44)
+    x = Add(name = 'Add_45')([layer_42, x])
+    layer_44 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =46)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =47)
+    x = Add(name = 'Add_48')([layer_44, x])
+    layer_48 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =49)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =50)
+    x = Add(name = 'Add_51')([layer_48, x])
+
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =52)
+    x = Concatenate(name = 'Concatenate_53')([x, layer_25])
+    #x_54 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =54)
+    x_54 = x
+    ###Downsampling
+
+    x = Conv(x, 512, 3, 2, activation = activation, batch_norm = batch_norm, idx =55)
+    layer_55 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =56)
+    layer_56 = x
+    #idx = 57 (route)
+    x = layer_55
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =58)
+    layer_58 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =59)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =60)
+    x = Add(name = 'Add_61')([layer_58, x])
+    layer_61 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =62)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =63)
+    x = Add(name = 'Add_64')([layer_61, x])
+    layer_64 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =65)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =66)
+    x = Add(name = 'Add_67')([layer_64, x])
+    layer_67 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =68)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =69)
+    x = Add(name = 'Add_70')([layer_67, x])
+    layer_70 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =71)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =72)
+    x  = Add(name = 'Add_73')([layer_70, x])
+    layer_73 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =74)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =75)
+    x = Add(name = 'Add_76')([layer_73, x])
+    layer_76 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =77)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =78)
+    x  = Add(name = 'Add_79')([layer_76, x])
+    layer_79 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =80)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =81)
+    x = Add(name = 'Add_82')([layer_79, x])
+    #previous_28 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =83)
+    x  = Concatenate(name = 'Concatenate_84')([x, layer_56])
+    #x_85 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =85)
+    x_85 = x
+    ###Downsampling
+
+    x = Conv(x, 1024, 3, 2, activation = activation, batch_norm = batch_norm, idx =86)
+    layer_86 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =87)
+    layer_87 = x
+    #idx = 88 (route)
+    x = layer_86
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =89)
+    layer_89 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =90)
+    x = Conv(x, 512, 3, 1, activation = activation, batch_norm = batch_norm, idx =91)
+    x = Add(name = 'Add_92')([layer_89, x])
+    layer_92 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =93)
+    x = Conv(x, 512, 3, 1, activation = activation, batch_norm = batch_norm, idx =94)
+    x = Add(name = 'Add_95')([layer_92, x])
+    layer_95 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =96)
+    x = Conv(x, 512, 3, 1, activation = activation, batch_norm = batch_norm, idx =97)
+    x = Add(name = 'Add_98')([layer_95, x])
+    layer_98 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =99)
+    x = Conv(x, 512, 3, 1, activation = activation, batch_norm = batch_norm, idx =100)
+    x = Add(name = 'Add_101')([layer_98, x])
+    layer_101 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =102)
+    x = Concatenate(name = 'Concatenate_103')([x, layer_101])
+    x = Conv(x, 1024, 1, 1, activation = activation, batch_norm = batch_norm, idx =104)
+
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =105)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =106)
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =107)
+    layer_107 = x
+
+    ###SPP
+    
+    x = MaxPool2D(pool_size = (5,5), strides = 1, padding = 'same', name = 'maxpool2d_108')(x)
+    layer_108 = x
+    #idx = 109 (route)
+    x = layer_107
+    x = MaxPool2D(pool_size = (9,9), strides = 1, padding = 'same', name = 'maxpool2d_110')(x)
+    layer_110 = x
+    #idx = 111 (route)
+    x = layer_107
+    x = MaxPool2D(pool_size = (13, 13), strides = 1, padding = 'same', name = 'maxpool2d_112')(x)
+    layer_112 = x
+    x = Concatenate(name = 'Concatenate_113')([layer_112, layer_110, layer_108, layer_107])
+
+    ###End SPP
+
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =114)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =115)
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =116)
+    layer_116 = x
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =117)
+
+    x = UpSampling2D(2, name = 'UpSampling2D_118')(x)
+    layer_118 = x
+    # idx = 119 (route)
+    x = x_85
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =120)
+    x = Concatenate(name = 'Concatenate_121')([x, layer_118])
+    #x = Concatenate(name = 'Concatenate_120')([x, previous_41])
+
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =122)
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =123)
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =124)
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =125)
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =126)
+    layer_126 = x
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =127)
+    x = UpSampling2D(2, name = 'UpSampling2D_128')(x)
+    layer_128 = x
+    # idx = 129 (route)
+    x = x_54
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =130)
+    x = Concatenate(name = 'Concatenate_131')([x, layer_128])
+    layer_131 = x
+    #previous_44 = x
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =132)
+    x = Conv(x, 256, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =133)
+
+    #x = yoloConv_v4(128, name = 'yolo_conv_v4_0')(x)
+
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =134)
+    x = Conv(x, 256, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =135)
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =136)
+    layer_136 = x
+
+    x = Conv(x, 256, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =137)
+    layer_137 = x
+    x = Conv(x, 3*(classes + 5), 1, 1, activation = 'Linear', batch_norm = True, idx =138)
+    #idx = 139 (output)
+    output_v4_0 = x
+    #x = output_v4_0 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[0]), classes + 5)), name ='output_v4_0_137')(x)
+    
+    #idx = 140 (route)
+    x = layer_136
+    x = Conv(x, 256, 3, 2, activation = 'LeakyReLU', batch_norm = batch_norm, idx =141)
+    x = Concatenate(name = 'Concatenate_142')([x, layer_126])
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =143)
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =144)
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =145)
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =146)
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =147)
+    layer_147 = x
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =148)
+    x = Conv(x, 3*(classes + 5), 1, 1, activation = 'Linear', batch_norm = True, idx =149)
+    #idx = 150 (output)
+    output_v4_1 = x
+    #x = output_v4_1 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[1]), classes + 5)), name = 'output_v4_1_147')(x)
+    #idx = 151 (route)
+    x = layer_147
+    x = Conv(x, 512, 3, 2, activation = 'LeakyReLU', batch_norm = batch_norm, idx = 152)
+    x = Concatenate(name = 'Concatenate_153')([x, layer_116])
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =154)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =155)
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =156)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =157)
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =158)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =159)
+    x = Conv(x, 3*(classes + 5), 1, 1, activation = 'Linear', batch_norm = True, idx =160)
+    #idx = 161 (output)
+    output_v4_2 = x
+    #x = output_v4_2 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[2]), classes + 5)), name = 'output_v4_2_157')(x)
+
+    return Model(inputs, [output_v4_0, output_v4_1, output_v4_2], name = 'yolov4')
+'''
+def Yolov4_2(size=None, channels=3, anchors=yolo_anchors_608, masks=yolo_anchor_masks, classes=80, training=False, activation = 'Mish', batch_norm = True):
+    x = inputs = Input([size, size, channels], name = 'input_0')
+    x = Conv(x, 32, 3, activation = activation, batch_norm = batch_norm, idx = 0)
+    x = Conv(x, 64, 3, 2, activation = activation, batch_norm = batch_norm, idx =1)
+    previous_1 = x
+    x = previous_2 = Conv(x, 64, 1, activation= activation, batch_norm=batch_norm, idx =2)
+    previous_2 = x
+    #idx = 3 (route)
+    x = previous_1
+    x = Conv(x, 64, 1, activation = activation, batch_norm = batch_norm, idx =4)
+    previous_3 = x
+    x = Conv(x, 32, 1, activation = activation, batch_norm = batch_norm, idx =5)
+    x = Conv(x, 64, 3, strides = 1, activation = activation, batch_norm = batch_norm, idx =6) ###
+
+    x = Add(name = 'Add_7')([previous_3, x])
+    x = Conv(x, 64, 1, activation = activation, batch_norm = batch_norm, idx =8)
+    x = Concatenate(name = 'Concatenate_9')([x, previous_2])
+
+    x = Conv(x, 64, 1, activation = activation, batch_norm = batch_norm, idx =10)
+
+    ###DownSampling
+
+    x = Conv(x, 128, 3, 2, activation = activation, batch_norm = batch_norm, idx =11)
+    previous_3 = x
+
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =12)
+    previous_7 = x
+    #idx = 13 (route)
+    x = previous_3
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =14)
+    previous_4 = x
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =15)
+    x = Conv(x, 64, 3, 1, activation = activation, batch_norm = batch_norm, idx =16)
+    x = Add(name = 'Add_17')([previous_4, x])
+    previous_5 = x
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =18)
+    x = Conv(x, 64, 3, 1, activation = activation, batch_norm = batch_norm, idx =19)
+    x = Add(name = 'Add_20')([previous_5, x])
+    previous_6 = x
+    x = Conv(x, 64, 1, 1, activation = activation, batch_norm = batch_norm, idx =21)
+    x = Concatenate(name = 'Concatenate_22')([x, previous_7])
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =23)
+
+    ###DownSampling
+
+    x =Conv(x, 256, 3, 2, activation = activation, batch_norm = batch_norm, idx =24)
+    previous_8 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =25)
+    previous_18 = x
+    #idx = 26 (route)
+    x = previous_8
+    x =Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =27)
+    previous_9 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =28)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =29)
+    x = Add(name = 'Add_30')([previous_9, x])
+    previous_10 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =31)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =32)
+    x = Add(name = 'Add_33')([previous_10, x])
+    previous_11 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =34)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =35)
+    x = Add(name = 'Add_36')([previous_11, x])
+    previous_12 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =37)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =38)
+    x = Add(name = 'Add_39')([previous_12, x])
+    previous_13 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =40)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =41)
+    x = Add(name = 'Add_42')([previous_13, x])
+    previous_14 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =43)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =44)
+    x = Add(name = 'Add_45')([previous_14, x])
+    previous_15 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =46)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =47)
+    x = Add(name = 'Add_48')([previous_15, x])
+    previous_16 = x
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =49)
+    x = Conv(x, 128, 3, 1, activation = activation, batch_norm = batch_norm, idx =50)
+    x = Add(name = 'Add_51')([previous_16, x])
+    previous_17 = x
+
+    x = Conv(x, 128, 1, 1, activation = activation, batch_norm = batch_norm, idx =52)
+    x = Concatenate(name = 'Concatenate_53')([x, previous_18])
+    #x_54 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =54)
+    x_54 = x
+
+    ###Downsampling
+
+    x = Conv(x, 512, 3, 2, activation = activation, batch_norm = batch_norm, idx =55)
+    previous_19 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =56)
+    previous_29 = x
+    #idx = 57 (route)
+    x = previous_19
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =58)
+    previous_20 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =59)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =60)
+    x = Add(name = 'Add_61')([previous_20, x])
+    previous_21 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =62)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =63)
+    x = Add(name = 'Add_64')([previous_21, x])
+    previous_22 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =65)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =66)
+    x = Add(name = 'Add_67')([previous_22, x])
+    previous_23 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =68)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =69)
+    x = Add(name = 'Add_70')([previous_23, x])
+    previous_24 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =71)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =72)
+    x  = Add(name = 'Add_73')([previous_24, x])
+    previous_25 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =74)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =75)
+    x = Add(name = 'Add_76')([previous_25, x])
+    previous_26 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =77)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =78)
+    x  = Add(name = 'Add_79')([previous_26, x])
+    previous_27 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =80)
+    x = Conv(x, 256, 3, 1, activation = activation, batch_norm = batch_norm, idx =81)
+    x = Add(name = 'Add_82')([previous_27, x])
+    previous_28 = x
+    x = Conv(x, 256, 1, 1, activation = activation, batch_norm = batch_norm, idx =83)
+    x  = Concatenate(name = 'Concatenate_84')([x, previous_29])
+    #x_85 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =85)
+    x_85 = x
+    ###Downsampling
+
+    x = Conv(x, 1024, 3, 2, activation = activation, batch_norm = batch_norm, idx =86)
+    previous_30 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =87)
+    previous_36 = x
+    #idx = 88 (route)
+    x = previous_30
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =89)
+    previous_31 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =90)
+    x = Conv(x, 512, 3, 1, activation = activation, batch_norm = batch_norm, idx =91)
+    x = Add(name = 'Add_92')([previous_31, x])
+    previous_32 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =93)
+    x = Conv(x, 512, 3, 1, activation = activation, batch_norm = batch_norm, idx =94)
+    x = Add(name = 'Add_95')([previous_32, x])
+    previous_33 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =96)
+    x = Conv(x, 512, 3, 1, activation = activation, batch_norm = batch_norm, idx =97)
+    x = Add(name = 'Add_98')([previous_33, x])
+    previous_34 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =99)
+    x = Conv(x, 512, 3, 1, activation = activation, batch_norm = batch_norm, idx =100)
+    x = Add(name = 'Add_101')([previous_34, x])
+    previous_35 = x
+    x = Conv(x, 512, 1, 1, activation = activation, batch_norm = batch_norm, idx =102)
+    x = Concatenate(name = 'Concatenate_103')([x, previous_36])
+    x = Conv(x, 1024, 1, 1, activation = activation, batch_norm = batch_norm, idx =104)
+
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =105)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =106)
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =107)
+    previous_37 = x
+
+    ###SPP
+
+    x = previous_37
+    
+    x = MaxPool2D(pool_size = (5,5), strides = 1, padding = 'same', name = 'maxpool2d_108')(x)
+    previous_38 = x
+    #idx = 109 (route)
+    x = previous_37
+    x = MaxPool2D(pool_size = (9,9), strides = 1, padding = 'same', name = 'maxpool2d_110')(x)
+    previous_39 = x
+    #idx = 111 (route)
+    x = previous_37
+    x = MaxPool2D(pool_size = (13, 13), strides = 1, padding = 'same', name = 'maxpool2d_112')(x)
+    previous_40 = x
+    x = Concatenate(name = 'Concatenate_113')([previous_40, previous_39, previous_38, previous_37])
+
+    ###End SPP
+
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =114)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =115)
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =116)
+    output_1 = x
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =117)
+
+    x = UpSampling2D(2, name = 'UpSampling2D_118')(x)
+    previous_41 = x
+    # idx = 119 (route)
+    x = x_85
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =120)
+    x = Concatenate(name = 'Concatenate_121')([x, previous_41])
+    #x = Concatenate(name = 'Concatenate_120')([x, previous_41])
+
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =122)
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =123)
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =124)
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =125)
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =126)
+    output_2 = x
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =127)
+    x = UpSampling2D(2, name = 'UpSampling2D_128')(x)
+    previous_42 = x
+    # idx = 129 (route)
+    x = x_54
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =130)
+    x = Concatenate(name = 'Concatenate_131')([x, previous_42])
+    #previous_44 = x
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =132)
+    x = Conv(x, 256, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =133)
+
+    #x = yoloConv_v4(128, name = 'yolo_conv_v4_0')(x)
+
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =134)
+    x = Conv(x, 256, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =135)
+    x = Conv(x, 128, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =136)
+    previous_43 = x
+
+    x = Conv(x, 256, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =137)
+    x = Conv(x, 3*(classes + 5), 1, 1, activation = 'Linear', batch_norm = True, idx =138)
+    #idx = 139 (output)
+    output_v4_0 = x
+    #x = output_v4_0 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[0]), classes + 5)), name ='output_v4_0_137')(x)
+    
+    #idx = 140 (route)
+    x = previous_43
+    x = Conv(x, 256, 3, 2, activation = 'LeakyReLU', batch_norm = batch_norm, idx =141)
+    x = Concatenate(name = 'Concatenate_142')([x, output_2])
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =143)
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =144)
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =145)
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =146)
+    x = Conv(x, 256, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =147)
+    previous_44 = x
+    x = Conv(x, 512, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =148)
+    x = Conv(x, 3*(classes + 5), 1, 1, activation = 'Linear', batch_norm = True, idx =149)
+    #idx = 150 (output)
+    output_v4_1 = x
+    #x = output_v4_1 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[1]), classes + 5)), name = 'output_v4_1_147')(x)
+    #idx = 151 (route)
+    x = previous_44
+    x = Conv(x, 512, 3, 2, activation = 'LeakyReLU', batch_norm = batch_norm, idx = 152)
+    x = Concatenate(name = 'Concatenate_153')([x, output_1])
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =154)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =155)
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =156)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =157)
+    x = Conv(x, 512, 1, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =158)
+    x = Conv(x, 1024, 3, 1, activation = 'LeakyReLU', batch_norm = batch_norm, idx =159)
+    x = Conv(x, 3*(classes + 5), 1, 1, activation = 'Linear', batch_norm = True, idx =160)
+    #idx = 161 (output)
+    output_v4_2 = x
+    #x = output_v4_2 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[2]), classes + 5)), name = 'output_v4_2_157')(x)
+
+    return Model(inputs, [output_v4_0, output_v4_1, output_v4_2], name = 'yolov4')
+    #output_v4_0 = Yolov4Output(128, len(masks[2]), classes, name = 'yolo_output_v4_0')(x)
+    #x = yoloConv_v4(256, name = 'yolo_conv_v4_1')((x, output_2))
+    #output_v4_1 = Yolov4Output(256, len(masks[1]), classes, name = 'yolo_output_v4_1')(x)
+    #x = yoloConv_v4(512, name = 'yolo_conv_v4_2')((x, output_1))
+    #output_v4_2 = Yolov4Output(512, len(masks[0]), classes, name = 'yolo_output_v4_2')(x)
+
+    #x = output_v4_0 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[0]), classes + 5)), name ='output_v4_0_137')(x)
+    #x = output_v4_1 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[1]), classes + 5)), name = 'output_v4_1_147')(x)
+    #x = output_v4_2 = Lambda(lambda x: tf.reshape(x, (-1, tf.shape(x)[1], tf.shape(x)[2], len(masks[2]), classes + 5)), name = 'output_v4_2_157')(x)
+    #if training:
+    #    return Model(inputs, [output_v4_2, output_v4_1, output_v4_0], name = 'yolov4')
+
+    #boxes_v4_0 = Lambda(lambda x: yolo_boxes(x, anchors[masks[0]], classes), name = 'yolo_boxes_v4_0')(output_v4_0)
+    #boxes_v4_1 = Lambda(lambda x: yolo_boxes(x, anchors[masks[1]], classes), name = 'yolo_boxes_v4_1')(output_v4_1)
+    #boxes_v4_2 = Lambda(lambda x: yolo_boxes(x, anchors[masks[2]], classes), name = 'yolo_boxes_v4_2')(output_v4_2)
+    #outputs_v4 = Lambda(lambda x: yolo_nms(x, anchors, masks, classes), name = 'yolo_nms')((boxes_v4_0[:3], boxes_v4_1[:3], boxes_v4_2[:3]))
+
+    #return Model(inputs, outputs_v4, name = 'yolov4')
+
+
 class WeightReader:
     def __init__(self, weight_file):
         with open(weight_file, 'rb') as w_f:
@@ -467,8 +1082,8 @@ class Mish(tf.keras.layers.Layer):
     
     def call(self, inputs):
         #return inputs * tf.math.tanh(tf.math.softplus(inputs))
-        return inputs * tf.math.tanh(tf.math.log(1. + tf.math.exp(inputs))) # for converting tflite format
-    
+        return inputs * tf.math.tanh(tf.math.log(1. + tf.math.exp(inputs)))
+
     def get_config(self):
         base_config = super(Mish, self).get_config()
         return {**base_config}
